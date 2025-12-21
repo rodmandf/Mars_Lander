@@ -161,11 +161,14 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
     float targetVy = 0.0f;
 
     if (phase == Phase::Descend) {
-        targetVy = -8.0f;
-        if (altToTarget < 120.0f) targetVy = -5.0f;
-        if (altToTarget < 50.0f)  targetVy = -2.5f;
-        if (altToTarget < 12.0f)  targetVy = -1.0f;
-        if (altToTarget < 5.0f)   targetVy = -0.5f;
+    // Быстро падаем почти до земли
+    targetVy = -14.0f;                 // было -8
+
+    // Поздний "брейк": начинаем снижать скорость ближе к поверхности
+    if (altToTarget < 45.0f) targetVy = -6.0f;
+    if (altToTarget < 20.0f) targetVy = -2.0f;
+    if (altToTarget < 8.0f)  targetVy = -1.0f;
+    if (altToTarget < 4.0f)  targetVy = -0.5f;
     } else {
         float altErr = (hoverAlt - altToTarget);
         targetVy = std::clamp(altErr * 0.35f, -6.0f, 6.0f);
@@ -190,7 +193,8 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
 
     out.mainThrust = std::clamp(baseThrust + pidOut, 0.0f, 1.0f);
 
-    if (altToTarget < 80.0f && state.vy < -18.0f) out.mainThrust = 1.0f;
+    if (altToTarget < 60.0f && state.vy < -16.0f) out.mainThrust = 1.0f;
+
 
     return out;
 }

@@ -8,7 +8,7 @@
 // Константы физики и мира 
 namespace Config {
     const float GRAVITY = 3.711f;
-    const float DT = 1.0f / 25.0f;
+    const float DT = 1.0f / 30.0f;
     const int WINDOW_WIDTH = 1280;
     const int WINDOW_HEIGHT = 720;
     const float MAX_MAIN_THRUST = 100.0f; // Мощность двигателя

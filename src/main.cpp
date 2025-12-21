@@ -14,7 +14,7 @@ int main() {
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
     sf::RenderWindow window(sf::VideoMode({Config::WINDOW_WIDTH, Config::WINDOW_HEIGHT}), "Mars Lander ");
-    window.setFramerateLimit(0);
+    window.setFramerateLimit(60);
 
     sf::View defaultView = window.getDefaultView();
     sf::View zoomView = defaultView;
