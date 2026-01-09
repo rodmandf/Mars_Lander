@@ -1,5 +1,6 @@
 #pragma once
 #include "Config.h"
+#include <vector>
 
 class PhysicsEngine {
 public:
@@ -7,6 +8,9 @@ public:
     void update(ControlOutput input, float terrainHeight);
     RoverState getState() const;
 
+    void setWind(float w);
+
 private:
     RoverState state;
+    float windForce = 0.0f; // Текущая сила ветра
 };

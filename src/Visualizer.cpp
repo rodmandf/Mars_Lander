@@ -2,10 +2,10 @@
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
+#include <string> 
 
 Visualizer::Visualizer() {
     std::vector<std::string> fontPaths;
-
     #ifdef _WIN32
         fontPaths.push_back("C:/Windows/Fonts/arial.ttf");
     #elif defined(__APPLE__)
@@ -19,7 +19,6 @@ Visualizer::Visualizer() {
         fontPaths.push_back("/usr/share/fonts/truetype/msttcorefonts/Arial.ttf"); 
     #endif
 
-
     bool fontLoaded = false;
     for (const auto& path : fontPaths) {
         if (font.openFromFile(path)) {
@@ -28,10 +27,10 @@ Visualizer::Visualizer() {
             break;
         }
     }
-
     if (!fontLoaded) {
         std::cerr << "Failed to load any system font!" << std::endl;
     }
+
     for (int i = 0; i < 100; i++) {
         stars.push_back({(float)(std::rand() % Config::WINDOW_WIDTH), (float)(std::rand() % Config::WINDOW_HEIGHT)});
     }
@@ -41,9 +40,10 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
                       const std::vector<float>& terrain, 
                       const std::vector<int>& zones, 
                       bool autoMode, bool paused, int scanX, int highlightZoneX,
-                      float foundMsgTimer, bool scanActive)
+                      float foundMsgTimer, bool scanActive,
+                      float currentWind) 
 {
-    // 1. Небо
+    // Небо
     sf::VertexArray sky(sf::PrimitiveType::TriangleStrip, 4);
     sky[0] = sf::Vertex{ sf::Vector2f(0.f, 0.f), Config::MARS_SKY_TOP };
     sky[1] = sf::Vertex{ sf::Vector2f((float)Config::WINDOW_WIDTH, 0.f), Config::MARS_SKY_TOP };
@@ -58,7 +58,7 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     }
     window.draw(starPoints);
 
-    // 3. Ландшафт
+    // Ландшафт
     if (!terrain.empty()) {
         sf::VertexArray ground(sf::PrimitiveType::TriangleStrip, terrain.size() * 2);
         for (size_t i = 0; i < terrain.size(); i++) {
@@ -71,7 +71,6 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
         window.draw(ground);
     }
 
-
     if (scanActive && autoMode && scanX >= 0 && scanX < (int)terrain.size()) {
         sf::VertexArray scan(sf::PrimitiveType::Lines, 2);
         scan[0].position = {(float)scanX, 0.f};
@@ -80,8 +79,7 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
         window.draw(scan);
     }
 
-
-    // 4. Зоны посадки
+    // Зоны посадки
     for (int zoneX : zones) {
         if (zoneX >= 0 && zoneX < (int)terrain.size()) {
             sf::RectangleShape zoneMark({60.f, 5.f}); 
@@ -91,7 +89,6 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
             window.draw(zoneMark);
         }
     }
-
     
     sf::Transform t;
     t.translate({state.x, state.y});
@@ -121,7 +118,6 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
 
     // Главный двигатель
     if (state.fuelMain > 0 && state.mainThrust > 0.01f && !state.crashed && !state.landed) {
-        // Размер пламени зависит от тяги
         float thrustScale = state.mainThrust; 
         float flicker = 10.0f + (std::rand() % 15);
         
@@ -134,11 +130,10 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
         window.draw(flame, t);
     }
 
-    // БОКОВЫЕ ДВИГАТЕЛИ
+    // Боковые двигатели
     auto drawSideJet = [&](sf::Vector2f mount, float throttle, float gimbal, bool isLeft)
     {
         if (throttle <= 0.01f) return;
-
         sf::RectangleShape noz({6.f, 3.f});
         noz.setOrigin({3.f, 1.5f});
         noz.setPosition(mount);
@@ -150,7 +145,6 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
         else dirLocal = { -std::cos(gimbal), std::sin(gimbal) };
 
         sf::Vector2f exhaustDir = -dirLocal;
-
         float L = 12.f + 20.f * throttle;
 
         sf::VertexArray jet(sf::PrimitiveType::Lines, 2);
@@ -164,26 +158,22 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     drawSideJet({-12.f, 0.f}, state.leftThrust,  state.leftGimbal,  true);
     drawSideJet({+12.f, 0.f}, state.rightThrust, state.rightGimbal, false);
 
-    drawHUD(window, state, autoMode, paused);
+    drawHUD(window, state, autoMode, paused, currentWind);
 
     if (foundMsgTimer > 0.0f && highlightZoneX >= 0 && highlightZoneX < (int)terrain.size()) {
         sf::Text msg(font);
         msg.setCharacterSize(16);
         msg.setFillColor(sf::Color(0, 255, 0, 230));
-
-        msg.setString("landing surface found coordinates are: x=" +
-                    std::to_string(highlightZoneX) +
-                    " y=" + std::to_string((int)terrain[highlightZoneX]));
-
+        msg.setString("landing surface found coordinates are: x=" + 
+                      std::to_string(highlightZoneX) + 
+                      " y=" + std::to_string((int)terrain[highlightZoneX]));
         msg.setPosition({20.f, 200.f}); 
         window.draw(msg);
     }
-
 }
 
-void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool autoMode, bool paused) {
-
-    sf::RectangleShape panel({250.f, 180.f});
+void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool autoMode, bool paused, float currentWind) {
+    sf::RectangleShape panel({250.f, 200.f}); 
     panel.setPosition({10.f, 10.f});
     panel.setFillColor(sf::Color(0, 0, 0, 150));
     panel.setOutlineColor(sf::Color::White);
@@ -205,20 +195,19 @@ void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool
         "Alt: " + std::to_string((int)(Config::WINDOW_HEIGHT - 150 - state.y)) + "\n" +
         "Speed X: " + std::to_string((int)state.vx) + "\n" +
         "Speed Y: " + std::to_string((int)state.vy) + "\n" +
-        "Fuel: " + std::to_string((int)state.fuelMain);
-    
+        "Fuel: " + std::to_string((int)state.fuelMain) + "\n" +
+        "Wind: " + std::to_string((int)currentWind); 
+
     if (paused) {
         sf::Text pausedTxt(font);
         pausedTxt.setString("PAUSED");
         pausedTxt.setCharacterSize(48);
         pausedTxt.setFillColor(sf::Color(255, 255, 255, 230));
-
         auto bounds = pausedTxt.getLocalBounds();
         pausedTxt.setOrigin({bounds.position.x + bounds.size.x * 0.5f,
-                            bounds.position.y + bounds.size.y * 0.5f});
+                             bounds.position.y + bounds.size.y * 0.5f});
         pausedTxt.setPosition({Config::WINDOW_WIDTH * 0.5f,
-                            Config::WINDOW_HEIGHT * 0.5f});
-
+                               Config::WINDOW_HEIGHT * 0.5f});
         window.draw(pausedTxt);
     }
 
@@ -228,9 +217,8 @@ void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool
     for (size_t i = 0; i < state.auxTanks.size(); i++) {
         float w = state.auxTanks[i];
         sf::RectangleShape bar({w / 2.0f, 8.f});
-        bar.setPosition({20.f, 145.f + i * 15.f});
+        bar.setPosition({20.f, 165.f + i * 15.f}); 
         bar.setFillColor(w > 0 ? sf::Color::Cyan : sf::Color::Red);
         window.draw(bar);
     }
-    
 }
