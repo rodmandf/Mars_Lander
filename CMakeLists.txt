@@ -21,6 +21,8 @@ set(SOURCES
     src/PhysicsEngine.cpp
     src/LandingController.cpp
     src/Visualizer.cpp
+    src/LandingSiteDetector.cpp
+    src/RadarTypes.cpp
 )
 
 set(HEADERS
@@ -29,6 +31,8 @@ set(HEADERS
     include/PhysicsEngine.h
     include/LandingController.h
     include/Visualizer.h
+    include/LandingSiteDetector.h
+    include/RadarTypes.h
 )
 
 

@@ -2,6 +2,8 @@
 #include "TerrainGenerator.h"
 #include "PhysicsEngine.h"
 #include "LandingController.h"
+#include "RadarTypes.h"
+#include "LandingSiteDetector.h"
 #include "Visualizer.h"
 #include <SFML/Graphics.hpp>
 #include <iostream>
@@ -25,27 +27,23 @@ int main() {
     Visualizer visualizer;
 
     std::vector<float> terrain;
-    std::vector<int> landingZones;
     bool autoMode = true;
     bool paused = false;
 
     float leftGimbal = 0.0f;
     float rightGimbal = 0.0f;
-    int scanX = 0;
-    bool scanActive = true;  
     bool landingFoundShown = false;
-    int highlightZoneX = -1;
     float foundMsgTimer = 0.0f;
-    const int scanStep = 12;
 
     float currentWind = 0.0f;
 
+    RadarConfig radarCfg;
+    DetectorConfig detCfg;
+
     auto restartMission = [&]() {
-        scanX = 0;
-        scanActive = true;
         landingFoundShown = false;
         foundMsgTimer = 0.0f;
-        highlightZoneX = -1;
+        autopilot.reset();
 
         currentWind = 0.0f; 
         physics.setWind(currentWind);
@@ -54,7 +52,6 @@ int main() {
         std::cout << "--- New Mission ---\n";
         
         terrain = terrainGen.generate(Config::WINDOW_WIDTH, seed);
-        landingZones = terrainGen.findLandingZones(terrain); 
         float startX = 100.0f + (std::rand() % (Config::WINDOW_WIDTH - 200));
         
         physics.init(startX, 50.0f, 500.0f, {100.0f, 100.0f});
@@ -101,41 +98,34 @@ int main() {
         float terrainH = terrain[tIdx];
 
         ControlOutput ctrl{};
-        highlightZoneX = -1;
-        if (!landingZones.empty()) {
-            highlightZoneX = landingZones[0];
-            int bestDist = std::abs(highlightZoneX - (int)state.x);
-            for (int zx : landingZones) {
-                int d = std::abs(zx - (int)state.x);
-                if (d < bestDist) { bestDist = d; highlightZoneX = zx; }
-            }
+        Vec2 radarOrigin{state.x, state.y};
+        auto radarHits = scanRadar(terrain, radarOrigin, 0.0f, radarCfg);
+        auto sites = detectLandingSites(radarHits, state.x, detCfg);
+        LandingSite bestSite{};
+        bool hasBestSite = pickBestSite(sites, bestSite);
+
+        // сохраняем площадку как место приземления
+        if (hasBestSite && !autopilot.hasLandingTarget()) {
+            autopilot.setLandingTarget(bestSite);
         }
+
+        bool hasTargetSite = autopilot.hasLandingTarget();
+        LandingSite targetSite{};
+        if (hasTargetSite) targetSite = autopilot.getLandingTarget();
 
         if (!paused) {
             // Обновляем ветер
             physics.setWind(currentWind);
 
             if (foundMsgTimer > 0.0f) foundMsgTimer -= Config::DT;
-            if (autoMode && scanActive && !terrain.empty()) {
-                scanX += scanStep;
-                if (scanX >= (int)terrain.size()) {
-                    scanX = (int)terrain.size() - 1;
-                    scanActive = false;
-                }
-                if (!landingFoundShown &&
-                    highlightZoneX != -1 &&
-                    std::abs(scanX - highlightZoneX) <= scanStep)
-                {
-                    landingFoundShown = true;
-                    foundMsgTimer = 5.0f;
-                    scanActive = false; 
-                    scanX = highlightZoneX; 
-                }
+            if (!landingFoundShown && autoMode && hasTargetSite) {
+                landingFoundShown = true;
+                foundMsgTimer = 5.0f;
             }
         }
 
         if (autoMode) {
-            ctrl = autopilot.compute(state, terrain);
+            ctrl = autopilot.compute(state, radarHits);
         } else {
             ctrl.mainThrust = 0.0f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    ctrl.mainThrust = 1.0f;
@@ -160,8 +150,8 @@ int main() {
         }
 
         window.clear();
-        visualizer.draw(window, state, terrain, landingZones, autoMode, paused,
-               scanX, highlightZoneX, foundMsgTimer, scanActive, currentWind);
+        visualizer.draw(window, state, terrain, radarHits, hasTargetSite, targetSite,
+                        autoMode, paused, foundMsgTimer, currentWind);
         
 
         window.display();

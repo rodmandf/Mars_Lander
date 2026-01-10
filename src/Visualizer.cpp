@@ -38,9 +38,11 @@ Visualizer::Visualizer() {
 
 void Visualizer::draw(sf::RenderWindow& window, const RoverState& state, 
                       const std::vector<float>& terrain, 
-                      const std::vector<int>& zones, 
-                      bool autoMode, bool paused, int scanX, int highlightZoneX,
-                      float foundMsgTimer, bool scanActive,
+                      const std::vector<RayHit>& radarHits,
+                      bool hasTargetSite,
+                      const LandingSite& targetSite,
+                      bool autoMode, bool paused,
+                      float foundMsgTimer,
                       float currentWind) 
 {
     // Небо
@@ -71,23 +73,41 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
         window.draw(ground);
     }
 
-    if (scanActive && autoMode && scanX >= 0 && scanX < (int)terrain.size()) {
-        sf::VertexArray scan(sf::PrimitiveType::Lines, 2);
-        scan[0].position = {(float)scanX, 0.f};
-        scan[1].position = {(float)scanX, terrain[scanX]};
-        scan[0].color = scan[1].color = sf::Color(0, 255, 255, 140);
-        window.draw(scan);
+    // Лучи радара
+    for (const auto& h : radarHits) {
+        sf::Vector2f o{h.origin.x, h.origin.y};
+        sf::Vector2f e = h.hit ? sf::Vector2f(h.point.x, h.point.y)
+                               : sf::Vector2f(h.origin.x + h.dir.x * h.t, h.origin.y + h.dir.y * h.t);
+
+        sf::VertexArray ray(sf::PrimitiveType::Lines, 2);
+        ray[0].position = o;
+        ray[1].position = e;
+        ray[0].color = sf::Color(0, 255, 255, 110);
+        ray[1].color = sf::Color(0, 255, 255, 40);
+        window.draw(ray);
+
+        if (h.hit) {
+            sf::CircleShape p(2.0f);
+            p.setOrigin({2.0f, 2.0f});
+            p.setPosition(e);
+            p.setFillColor(sf::Color(0, 255, 0, 180));
+            window.draw(p);
+        }
     }
 
-    // Зоны посадки
-    for (int zoneX : zones) {
-        if (zoneX >= 0 && zoneX < (int)terrain.size()) {
-            sf::RectangleShape zoneMark({60.f, 5.f}); 
-            zoneMark.setOrigin({30.f, 0.f});
-            zoneMark.setPosition({(float)zoneX, terrain[zoneX]});
-            zoneMark.setFillColor(sf::Color(255, 255, 0, 100));
-            window.draw(zoneMark);
-        }
+    // Лучшая площадка
+    if (hasTargetSite) {
+        float w = std::max(1.0f, targetSite.x1 - targetSite.x0);
+        sf::RectangleShape s({w, 6.f});
+        s.setPosition({targetSite.x0, targetSite.yMean - 3.f});
+        s.setFillColor(sf::Color(0, 255, 0, 90));
+        window.draw(s);
+
+        sf::CircleShape c(4.0f);
+        c.setOrigin({4.0f, 4.0f});
+        c.setPosition({targetSite.centerX, targetSite.yMean});
+        c.setFillColor(sf::Color(0, 255, 0, 200));
+        window.draw(c);
     }
     
     sf::Transform t;
@@ -160,13 +180,13 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
 
     drawHUD(window, state, autoMode, paused, currentWind);
 
-    if (foundMsgTimer > 0.0f && highlightZoneX >= 0 && highlightZoneX < (int)terrain.size()) {
+    if (foundMsgTimer > 0.0f && hasTargetSite) {
         sf::Text msg(font);
         msg.setCharacterSize(16);
         msg.setFillColor(sf::Color(0, 255, 0, 230));
-        msg.setString("landing surface found coordinates are: x=" + 
-                      std::to_string(highlightZoneX) + 
-                      " y=" + std::to_string((int)terrain[highlightZoneX]));
+        msg.setString("landing surface found coordinates are: x=" +
+                      std::to_string((int)targetSite.centerX) +
+                      " y=" + std::to_string((int)targetSite.yMean));
         msg.setPosition({20.f, 200.f}); 
         window.draw(msg);
     }

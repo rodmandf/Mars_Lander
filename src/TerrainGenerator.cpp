@@ -84,23 +84,3 @@ std::vector<float> TerrainGenerator::generate(int width, int seed) {
 
     return terrain;
 }
-
-std::vector<int> TerrainGenerator::findLandingZones(const std::vector<float>& terrain) {
-    std::vector<int> zones;
-    int currentFlat = 0;
-    
-    for (size_t x = 1; x < terrain.size(); x++) {
-        if (std::abs(terrain[x] - terrain[x-1]) < 0.1f) {
-            currentFlat++;
-        } else {
-            if (currentFlat > 40) { // Если нашли зону > 40 пикселей
-                zones.push_back(x - (currentFlat / 2));
-            }
-            currentFlat = 0;
-        }
-    }
-    // Проверка последнего участка
-    if (currentFlat > 40) zones.push_back(terrain.size() - (currentFlat / 2));
-    
-    return zones;
-}

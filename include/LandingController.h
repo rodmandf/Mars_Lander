@@ -1,17 +1,27 @@
 #pragma once
 #include "Config.h"
 #include <vector>
+#include "RadarTypes.h"
+#include "LandingSiteDetector.h"
 
 class LandingController {
 public:
-    ControlOutput compute(const RoverState& state, const std::vector<float>& terrain);
+    ControlOutput compute(const RoverState& state, const std::vector<RayHit>& radarHits);
+
+    // Сохраняем найденную площадку
+    void setLandingTarget(const LandingSite& site);
+    void clearLandingTarget();
+    bool hasLandingTarget() const;
+    const LandingSite& getLandingTarget() const;
+
+    void reset();
 
 private:
     enum class Phase { Approach, Hover, Descend };
     Phase phase = Phase::Approach;
 
-    float stableHoverTimer = 0.0f; // Таймер идеальной стабильности
-    float hoverDuration = 0.0f;    // Общее время висения
+    float stableHoverTimer = 0.0f;
+    float hoverDuration = 0.0f;
     
     // PID высоты
     float integralAlt = 0.0f;
@@ -19,6 +29,9 @@ private:
 
     // PID горизонтальной скорости
     float integralVx = 0.0f; 
+
+    bool targetLocked = false;
+    LandingSite lockedSite{};
 
     void resetPids() { 
         integralAlt = 0.0f; 

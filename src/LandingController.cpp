@@ -1,53 +1,71 @@
 #include "LandingController.h"
+#include "LandingSiteDetector.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
 #include <iostream>
 
-// Функция поиска зоны
-int scanForNearestZone(const std::vector<float>& terrain, float roverX) {
-    int bestX = -1;
-    float bestDist = 1e9f;
-    const float flatEps = 0.1f;
-    const int minFlatLen = 40;
-    int flatStart = 0;
-    int flatLen = 0;
-
-    for (int x = 1; x < (int)terrain.size(); ++x) {
-        if (std::abs(terrain[x] - terrain[x - 1]) < flatEps) {
-            if (flatLen == 0) flatStart = x - 1;
-            flatLen++;
-        } else {
-            if (flatLen > minFlatLen) {
-                int center = flatStart + flatLen / 2;
-                float d = std::abs((float)center - roverX);
-                if (d < bestDist) { bestDist = d; bestX = center; }
-            }
-            flatLen = 0;
-        }
-    }
-    if (flatLen > minFlatLen) {
-        int center = flatStart + flatLen / 2;
-        float d = std::abs((float)center - roverX);
-        if (d < bestDist) { bestDist = d; bestX = center; }
-    }
-    return bestX;
+void LandingController::setLandingTarget(const LandingSite& site) {
+    lockedSite = site;
+    targetLocked = true;
 }
 
-ControlOutput LandingController::compute(const RoverState& state, const std::vector<float>& terrain) {
+void LandingController::clearLandingTarget() {
+    targetLocked = false;
+    lockedSite = LandingSite{};
+}
+
+bool LandingController::hasLandingTarget() const {
+    return targetLocked;
+}
+
+const LandingSite& LandingController::getLandingTarget() const {
+    return lockedSite;
+}
+
+void LandingController::reset() {
+    phase = Phase::Approach;
+    stableHoverTimer = 0.0f;
+    hoverDuration = 0.0f;
+    resetPids();
+    clearLandingTarget();
+}
+
+static float estimateGroundY(const std::vector<RayHit>& hits, float fallbackY) {
+    // Берём ближайшее пересечение
+    float bestT = 1e9f;
+    float bestY = fallbackY;
+    for (const auto& h : hits) {
+        if (!h.hit) continue;
+        if (h.t < bestT) { bestT = h.t; bestY = h.point.y; }
+    }
+    return bestY;
+}
+
+ControlOutput LandingController::compute(const RoverState& state, const std::vector<RayHit>& radarHits) {
     ControlOutput out{};
     out.leftGimbal = 0.0f;
     out.rightGimbal = 0.0f;
 
     const float groundOffset = 12.0f;
-    int targetX = scanForNearestZone(terrain, state.x);
-    if (targetX == -1) targetX = (int)state.x;
 
-    int tx = std::clamp(targetX, 0, (int)terrain.size() - 1);
-    float targetTerrainH = terrain[tx];
+    LandingSite targetSite{};
+    bool haveTarget = false;
+    if (targetLocked) {
+        targetSite = lockedSite;
+        haveTarget = true;
+    } else {
+        DetectorConfig detCfg;
+        auto sites = detectLandingSites(radarHits, state.x, detCfg);
+        haveTarget = pickBestSite(sites, targetSite);
+    }
+
+    float targetX = haveTarget ? targetSite.centerX : state.x;
+    float targetTerrainH = haveTarget ? targetSite.yMean : estimateGroundY(radarHits, state.y + 200.f);
+
     float altToTarget = (targetTerrainH - groundOffset) - state.y;
 
-    float distX = (float)targetX - state.x;
+    float distX = targetX - state.x;
 
     const float hoverAlt = 120.0f; 
     const float xTol = 12.0f; 
