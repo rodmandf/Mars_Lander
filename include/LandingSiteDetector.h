@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include "RadarTypes.h"
+#include "Config.h"
 
 struct LandingSite {
     float x0 = 0.f;
@@ -13,9 +14,9 @@ struct LandingSite {
 
 struct DetectorConfig {
     float maxGapX = 10.f;       // максимальный разрыв между точками
-    float minLenX = 60.f;       // минимальная длина площадки
-    float maxSlope = 0.02f;     // ограничение на кривизну поверхности
-    float maxBandY = 2.0f;      // ограничение на угол наклона площадки
+    float minLenX = 40.f;       // минимальная длина площадки
+    float maxSlope = 0.05f;     // ограничение на кривизну поверхности
+    float maxBandY = std::tan(Config::MAX_LANDING_ANGLE_RAD);      // ограничение на угол наклона площадки
 };
 
 std::vector<LandingSite> detectLandingSites(const std::vector<RayHit>& hits,

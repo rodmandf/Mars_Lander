@@ -13,6 +13,9 @@ namespace Config {
     const int WINDOW_HEIGHT = 720;
     const float MAX_MAIN_THRUST = 100.0f; // Мощность двигателя
     const float MAX_SIDE_THRUST = 20.0f;
+
+    // Максимально допустимый угол корпуса для безопасной посадки (радианы)
+    const float MAX_LANDING_ANGLE_RAD = 0.13f;
     
     // Цвета
     const sf::Color MARS_SKY_TOP(20, 20, 40);

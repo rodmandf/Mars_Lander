@@ -1,13 +1,8 @@
 #include "TerrainGenerator.h"
-#include <cmath>
+#include "FastNoiseLite.h"
 #include <cstdlib>
 #include <algorithm>
-
-float TerrainGenerator::getNoise(float x, int seed) {
-    return std::sin(x * 0.01f + seed) * 120.0f + 
-           std::sin(x * 0.02f + seed * 3) * 60.0f +
-           std::sin(x * 0.05f) * 15.0f; 
-}
+#include <cmath>
 
 std::vector<float> TerrainGenerator::generate(int width, int seed) {
     std::vector<float> terrain(width);
@@ -21,23 +16,43 @@ std::vector<float> TerrainGenerator::generate(int width, int seed) {
     };
 
 
-    const float baseY = Config::WINDOW_HEIGHT - 150.0f; 
-    const float amp = 1.0f; 
+    // Шум FastNoiseLite
+    FastNoiseLite noise;
+    noise.SetSeed(seed);
+    noise.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
+    noise.SetFractalType(FastNoiseLite::FractalType_FBm);
+    noise.SetFractalOctaves(3);
+    noise.SetFractalLacunarity(2.0f);
+    noise.SetFractalGain(0.4f);
+    noise.SetFrequency(0.002f);
+
+    const float baseY = Config::WINDOW_HEIGHT * 0.75f;
+    const float mountainScale = 140.0f;
 
     for (int x = 0; x < width; ++x) {
-        float noiseVal = getNoise((float)x, seed); 
-        terrain[x] = baseY - amp * noiseVal; 
-        terrain[x] = clampf(terrain[x], 80.0f, (float)Config::WINDOW_HEIGHT - 20.0f);
+        float n = noise.GetNoise((float)x, 0.0f);
+
+        // Основной рельеф
+        terrain[x] = baseY - (n * mountainScale);
+
+        float pebbles = noise.GetNoise((float)x * 15.0f, 100.0f) * 1.5f;
+        terrain[x] += pebbles;
+
+        terrain[x] = clampf(terrain[x], 100.0f, (float)Config::WINDOW_HEIGHT - 20.0f);
     }
 
-    std::vector<float> tmp = terrain;
-    for (int pass = 0; pass < 3; ++pass) {
-        tmp[0] = terrain[0];
-        tmp[width - 1] = terrain[width - 1];
-        for (int x = 1; x < width - 1; ++x) {
-            tmp[x] = (terrain[x - 1] + 2.0f * terrain[x] + terrain[x + 1]) * 0.25f;
+    // Небольшое сглаживание
+    {
+        std::vector<float> tmp = terrain;
+        int smoothRadius = 2;
+        for (int pass = 0; pass < 1; ++pass) {
+            tmp = terrain;
+            for (int x = smoothRadius; x < width - smoothRadius; ++x) {
+                float sum = 0.0f;
+                for (int k = -smoothRadius; k <= smoothRadius; ++k) sum += tmp[x + k];
+                terrain[x] = sum / (2.0f * smoothRadius + 1.0f);
+            }
         }
-        terrain.swap(tmp);
     }
 
     int numZones = 1 + std::rand() % 4; 
@@ -60,12 +75,10 @@ std::vector<float> TerrainGenerator::generate(int width, int seed) {
         int padL = zoneX - zoneWidth / 2;
         int padR = zoneX + zoneWidth / 2;
 
-        // flat core
         for (int x = padL; x <= padR; ++x) {
             if (x >= 0 && x < width) terrain[x] = zoneHeight;
         }
 
-        // left blend
         for (int x = padL - blendW; x < padL; ++x) {
             if (x <= 0 || x >= width) continue;
             float t = (float)(x - (padL - blendW)) / (float)blendW; 
@@ -73,12 +86,25 @@ std::vector<float> TerrainGenerator::generate(int width, int seed) {
             terrain[x] = lerp(terrain[x], zoneHeight, w);
         }
 
-        // right blend
         for (int x = padR + 1; x <= padR + blendW; ++x) {
             if (x <= 0 || x >= width) continue;
             float t = (float)(x - (padR + 1)) / (float)blendW; 
             float w = smoothstep01(t);
             terrain[x] = lerp(zoneHeight, terrain[x], w);
+        }
+    }
+
+    // Сильное сглаживание
+    {
+        std::vector<float> tmp = terrain;
+        int smoothRadius = 6;
+        for (int pass = 0; pass < 2; ++pass) {
+            tmp = terrain;
+            for (int x = smoothRadius; x < width - smoothRadius; ++x) {
+                float sum = 0.0f;
+                for (int k = -smoothRadius; k <= smoothRadius; ++k) sum += tmp[x + k];
+                terrain[x] = sum / (2.0f * smoothRadius + 1.0f);
+            }
         }
     }
 

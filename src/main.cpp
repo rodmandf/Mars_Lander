@@ -39,6 +39,8 @@ int main() {
 
     RadarConfig radarCfg;
     DetectorConfig detCfg;
+    detCfg.maxSlope = std::tan(Config::MAX_LANDING_ANGLE_RAD);
+    detCfg.maxBandY = std::max(detCfg.maxBandY, detCfg.maxSlope * detCfg.minLenX);
 
     auto restartMission = [&]() {
         landingFoundShown = false;

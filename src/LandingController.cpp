@@ -56,6 +56,8 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
         haveTarget = true;
     } else {
         DetectorConfig detCfg;
+        detCfg.maxSlope = std::tan(Config::MAX_LANDING_ANGLE_RAD);
+        detCfg.maxBandY = std::max(detCfg.maxBandY, detCfg.maxSlope * detCfg.minLenX);
         auto sites = detectLandingSites(radarHits, state.x, detCfg);
         haveTarget = pickBestSite(sites, targetSite);
     }

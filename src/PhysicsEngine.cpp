@@ -116,7 +116,7 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
         
         bool safeSpeed = std::abs(state.vy) < 12.0f && std::abs(state.vx) < 12.0f; 
         
-        bool bothLegsDown = std::abs(state.angle) < 0.13f; 
+        bool bothLegsDown = std::abs(state.angle) < Config::MAX_LANDING_ANGLE_RAD; 
 
         if (safeSpeed && bothLegsDown) state.landed = true;
         else state.crashed = true; 
