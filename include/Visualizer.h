@@ -16,11 +16,23 @@ public:
               const LandingSite& targetSite,
               bool autoMode, bool paused,
               float foundMsgTimer,
-              float currentWind); 
+              float currentWind,
+              float timeScale,
+              int gimbalMode,
+              const char* phaseName); 
 
 private:
     sf::Font font;
     std::vector<sf::Vector2f> stars;
 
-    void drawHUD(sf::RenderWindow& window, const RoverState& state, bool autoMode, bool paused, float currentWind);
+    void drawHUD(sf::RenderWindow& window,
+                 const RoverState& state,
+                 bool autoMode,
+                 bool paused,
+                 float currentWind,
+                 float timeScale,
+                 int gimbalMode,
+                 const char* phaseName,
+                 bool hasTargetSite,
+                 const LandingSite& targetSite);
 };

@@ -31,6 +31,15 @@ void LandingController::reset() {
     clearLandingTarget();
 }
 
+const char* LandingController::getPhaseName() const {
+    switch (phase) {
+        case Phase::Approach: return "Approach";
+        case Phase::Hover:    return "Hover";
+        case Phase::Descend:  return "Descend";
+        default:              return "?";
+    }
+}
+
 static float estimateGroundY(const std::vector<RayHit>& hits, float fallbackY) {
     // Берём ближайшее пересечение
     float bestT = 1e9f;

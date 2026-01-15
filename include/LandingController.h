@@ -16,6 +16,8 @@ public:
 
     void reset();
 
+    const char* getPhaseName() const;
+
 private:
     enum class Phase { Approach, Hover, Descend };
     Phase phase = Phase::Approach;

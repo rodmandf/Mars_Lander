@@ -43,7 +43,10 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
                       const LandingSite& targetSite,
                       bool autoMode, bool paused,
                       float foundMsgTimer,
-                      float currentWind) 
+                      float currentWind,
+                      float timeScale,
+                      int gimbalMode,
+                      const char* phaseName) 
 {
     // Небо
     sf::VertexArray sky(sf::PrimitiveType::TriangleStrip, 4);
@@ -178,45 +181,94 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     drawSideJet({-12.f, 0.f}, state.leftThrust,  state.leftGimbal,  true);
     drawSideJet({+12.f, 0.f}, state.rightThrust, state.rightGimbal, false);
 
-    drawHUD(window, state, autoMode, paused, currentWind);
+    sf::View currentView = window.getView();
+    sf::View screenView = window.getDefaultView();
+    window.setView(screenView);
+
+    drawHUD(window, state, autoMode, paused, currentWind, timeScale, gimbalMode, phaseName,
+            hasTargetSite, targetSite);
 
     if (foundMsgTimer > 0.0f && hasTargetSite) {
         sf::Text msg(font);
         msg.setCharacterSize(16);
         msg.setFillColor(sf::Color(0, 255, 0, 230));
-        msg.setString("landing surface found coordinates are: x=" +
+        msg.setString("Landing site found: x=" +
                       std::to_string((int)targetSite.centerX) +
                       " y=" + std::to_string((int)targetSite.yMean));
-        msg.setPosition({20.f, 200.f}); 
+        msg.setPosition({20.f, 220.f});
         window.draw(msg);
     }
+
+    window.setView(currentView);
 }
 
-void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool autoMode, bool paused, float currentWind) {
-    sf::RectangleShape panel({250.f, 200.f}); 
+void Visualizer::drawHUD(sf::RenderWindow& window,
+                         const RoverState& state,
+                         bool autoMode,
+                         bool paused,
+                         float currentWind,
+                         float timeScale,
+                         int gimbalMode,
+                         const char* phaseName,
+                         bool hasTargetSite,
+                         const LandingSite& targetSite)
+{
+    float panelHeight = 260.f;
+    if (hasTargetSite) panelHeight += 50.f;
+
+    sf::RectangleShape panel({270.f, panelHeight}); 
     panel.setPosition({10.f, 10.f});
     panel.setFillColor(sf::Color(0, 0, 0, 150));
     panel.setOutlineColor(sf::Color::White);
     panel.setOutlineThickness(1.f);
     window.draw(panel);
 
-    sf::Text txt(font);
-    txt.setCharacterSize(14);
-    txt.setFillColor(sf::Color::White);
-    txt.setPosition({20.f, 20.f});
-
     std::string status = "FLYING";
     if (state.crashed) status = "CRASHED";
     else if (state.landed) status = "LANDED SUCCESS";
 
+    char timeScaleStr[16];
+    std::snprintf(timeScaleStr, sizeof(timeScaleStr), "%.2fx", timeScale);
+
+    float angleDeg = state.angle * 180.0f / 3.14159265f;
+    char angleStr[16];
+    std::snprintf(angleStr, sizeof(angleStr), "%.1f", angleDeg);
+
+    std::string gimbalModeStr;
+    if (gimbalMode == 1) gimbalModeStr = "LEFT";
+    else if (gimbalMode == 2) gimbalModeStr = "RIGHT";
+    else gimbalModeStr = "BOTH";
+
+    std::string targetInfo;
+    if (hasTargetSite) {
+        float distX = targetSite.centerX - state.x;
+        float altToTarget = targetSite.yMean - state.y;
+        targetInfo =
+            "\n--- Landing Site ---"
+            "\nTarget: (" + std::to_string((int)targetSite.centerX) + ", " + std::to_string((int)targetSite.yMean) + ")"
+            "\nDist X: " + std::to_string((int)distX) + " px"
+            "\nAlt: " + std::to_string((int)altToTarget);
+    }
+
     std::string info = 
         "Status: " + status + "\n" +
+        "Phase: " + std::string(phaseName ? phaseName : "?") + "\n" +
         "Mode: " + (autoMode ? "AUTOPILOT" : "MANUAL") + "\n" +
-        "Alt: " + std::to_string((int)(Config::WINDOW_HEIGHT - 150 - state.y)) + "\n" +
-        "Speed X: " + std::to_string((int)state.vx) + "\n" +
-        "Speed Y: " + std::to_string((int)state.vy) + "\n" +
+        "Angle: " + std::string(angleStr) + " deg\n" +
+        "X: " + std::to_string((int)state.x) + "  Y: " + std::to_string((int)state.y) + "\n" +
+        "Vx: " + std::to_string((int)state.vx) + "  Vy: " + std::to_string((int)state.vy) + "\n" +
         "Fuel: " + std::to_string((int)state.fuelMain) + "\n" +
-        "Wind: " + std::to_string((int)currentWind); 
+        "Time: " + std::string(timeScaleStr) + "\n" +
+        "Wind: " + std::to_string((int)currentWind) +
+        (autoMode ? "" : "\nGimbal: " + gimbalModeStr) +
+        targetInfo;
+
+    sf::Text txt(font);
+    txt.setCharacterSize(14);
+    txt.setFillColor(sf::Color::White);
+    txt.setPosition({20.f, 20.f});
+    txt.setString(info);
+    window.draw(txt);
 
     if (paused) {
         sf::Text pausedTxt(font);
@@ -229,16 +281,5 @@ void Visualizer::drawHUD(sf::RenderWindow& window, const RoverState& state, bool
         pausedTxt.setPosition({Config::WINDOW_WIDTH * 0.5f,
                                Config::WINDOW_HEIGHT * 0.5f});
         window.draw(pausedTxt);
-    }
-
-    txt.setString(info);
-    window.draw(txt);
-
-    for (size_t i = 0; i < state.auxTanks.size(); i++) {
-        float w = state.auxTanks[i];
-        sf::RectangleShape bar({w / 2.0f, 8.f});
-        bar.setPosition({20.f, 165.f + i * 15.f}); 
-        bar.setFillColor(w > 0 ? sf::Color::Cyan : sf::Color::Red);
-        window.draw(bar);
     }
 }

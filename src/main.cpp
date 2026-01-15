@@ -14,7 +14,7 @@
 int main() {
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
     sf::RenderWindow window(sf::VideoMode({Config::WINDOW_WIDTH, Config::WINDOW_HEIGHT}), "Mars Lander - Wind Control Added");
-    window.setFramerateLimit(60);
+    window.setFramerateLimit(0);
 
     sf::View defaultView = window.getDefaultView();
     sf::View zoomView = defaultView;
@@ -28,7 +28,11 @@ int main() {
 
     std::vector<float> terrain;
     bool autoMode = true;
-    bool paused = false;
+    bool paused = true;
+
+    float timeScale = 1.0f;
+    float timeAcc = 0.0f;
+    int gimbalMode = 3;       // 1=левый,2=правый,3=оба
 
     float leftGimbal = 0.0f;
     float rightGimbal = 0.0f;
@@ -46,6 +50,7 @@ int main() {
         landingFoundShown = false;
         foundMsgTimer = 0.0f;
         autopilot.reset();
+        timeAcc = 0.0f;
 
         currentWind = 0.0f; 
         physics.setWind(currentWind);
@@ -66,24 +71,49 @@ int main() {
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
                 if (keyPressed->code == sf::Keyboard::Key::P) paused = !paused;
                 if (keyPressed->code == sf::Keyboard::Key::R) restartMission();
-                if (keyPressed->code == sf::Keyboard::Key::A) autoMode = !autoMode;
+                if (keyPressed->code == sf::Keyboard::Key::M) autoMode = !autoMode;
 
-                // Управление ветром
-                if (keyPressed->code == sf::Keyboard::Key::Q) {
+                if (keyPressed->code == sf::Keyboard::Key::LBracket) {
                     currentWind -= 5.0f;
                     std::cout << "Wind changed: " << currentWind << "\n";
                 }
-                if (keyPressed->code == sf::Keyboard::Key::E) {
+                if (keyPressed->code == sf::Keyboard::Key::RBracket) {
                     currentWind += 5.0f;
                     std::cout << "Wind changed: " << currentWind << "\n";
                 }
+
+                if (keyPressed->code == sf::Keyboard::Key::Hyphen) {
+                    timeScale = std::max(0.25f, timeScale * 0.5f);
+                    std::cout << "Time scale: " << timeScale << "x\n";
+                }
+                if (keyPressed->code == sf::Keyboard::Key::Equal) {
+                    timeScale = std::min(4.0f, timeScale * 2.0f);
+                    std::cout << "Time scale: " << timeScale << "x\n";
+                }
+
+                if (keyPressed->code == sf::Keyboard::Key::X) {
+                    std::swap(leftGimbal, rightGimbal);
+                    std::cout << "Gimbal swapped! L=" << leftGimbal << " R=" << rightGimbal << "\n";
+                }
+                if (keyPressed->code == sf::Keyboard::Key::Z) {
+                    leftGimbal = 0.0f;
+                    rightGimbal = 0.0f;
+                    std::cout << "Gimbal reset to zero\n";
+                }
+                if (keyPressed->code == sf::Keyboard::Key::Num1) gimbalMode = 1;
+                if (keyPressed->code == sf::Keyboard::Key::Num2) gimbalMode = 2;
+                if (keyPressed->code == sf::Keyboard::Key::Num3) gimbalMode = 3;
             }
             if (const auto mb = event->getIf<sf::Event::MouseButtonPressed>()) {
                 if (mb->button == sf::Mouse::Button::Left) {
                     if (!zoomed) {
                         sf::Vector2i pixelPos(mb->position.x, mb->position.y);
                         sf::Vector2f worldPos = window.mapPixelToCoords(pixelPos, defaultView);
-                        zoomView.setCenter(worldPos);
+                        float viewHalfW = Config::WINDOW_WIDTH * 0.25f;
+                        float viewHalfH = Config::WINDOW_HEIGHT * 0.25f;
+                        float clampedX = std::clamp(worldPos.x, viewHalfW, (float)Config::WINDOW_WIDTH - viewHalfW);
+                        float clampedY = std::clamp(worldPos.y, viewHalfH, (float)Config::WINDOW_HEIGHT - viewHalfH);
+                        zoomView.setCenter({clampedX, clampedY});
                         window.setView(zoomView);
                         zoomed = true;
                     } else {
@@ -96,64 +126,104 @@ int main() {
         }
 
         RoverState state = physics.getState();
-        int tIdx = std::clamp((int)state.x, 0, Config::WINDOW_WIDTH - 1);
-        float terrainH = terrain[tIdx];
-
-        ControlOutput ctrl{};
-        Vec2 radarOrigin{state.x, state.y};
-        auto radarHits = scanRadar(terrain, radarOrigin, 0.0f, radarCfg);
-        auto sites = detectLandingSites(radarHits, state.x, detCfg);
-        LandingSite bestSite{};
-        bool hasBestSite = pickBestSite(sites, bestSite);
-
-        // сохраняем площадку как место приземления
-        if (hasBestSite && !autopilot.hasLandingTarget()) {
-            autopilot.setLandingTarget(bestSite);
-        }
-
+        std::vector<RayHit> radarHits;
         bool hasTargetSite = autopilot.hasLandingTarget();
         LandingSite targetSite{};
         if (hasTargetSite) targetSite = autopilot.getLandingTarget();
 
-        if (!paused) {
-            // Обновляем ветер
+        auto doOneSimStep = [&]() {
+
             physics.setWind(currentWind);
+
+
+            RoverState st = physics.getState();
+            int tIdx = std::clamp((int)st.x, 0, Config::WINDOW_WIDTH - 1);
+            float terrainH = terrain[tIdx];
+
+
+            Vec2 radarOrigin{st.x, st.y};
+            radarHits = scanRadar(terrain, radarOrigin, 0.0f, radarCfg);
+
+            auto sites = detectLandingSites(radarHits, st.x, detCfg);
+            LandingSite bestSite{};
+            bool hasBestSite = pickBestSite(sites, bestSite);
+
+            if (hasBestSite && !autopilot.hasLandingTarget()) {
+                autopilot.setLandingTarget(bestSite);
+            }
+
+            hasTargetSite = autopilot.hasLandingTarget();
+            if (hasTargetSite) targetSite = autopilot.getLandingTarget();
+
 
             if (foundMsgTimer > 0.0f) foundMsgTimer -= Config::DT;
             if (!landingFoundShown && autoMode && hasTargetSite) {
                 landingFoundShown = true;
                 foundMsgTimer = 5.0f;
             }
-        }
 
-        if (autoMode) {
-            ctrl = autopilot.compute(state, radarHits);
-        } else {
-            ctrl.mainThrust = 0.0f;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    ctrl.mainThrust = 1.0f;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) ctrl.rightThrust = 1.0f;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  ctrl.leftThrust = 1.0f;
+            ControlOutput ctrl{};
+            if (autoMode) {
+                ctrl = autopilot.compute(st, radarHits);
+            } else {
+                ctrl.mainThrust = 0.0f;
+                ctrl.leftThrust = 0.0f;
+                ctrl.rightThrust = 0.0f;
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    ctrl.mainThrust = 1.0f;
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) ctrl.rightThrust = 1.0f;
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  ctrl.leftThrust = 1.0f;
 
-            const float gimbalSpeed = 1.5f;
-            const float maxGimbal   = 0.8f;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::U)) rightGimbal += gimbalSpeed * Config::DT;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) rightGimbal -= gimbalSpeed * Config::DT;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T)) leftGimbal += gimbalSpeed * Config::DT;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G)) leftGimbal -= gimbalSpeed * Config::DT;
-            
-            leftGimbal  = std::clamp(leftGimbal,  -maxGimbal, maxGimbal);
-            rightGimbal = std::clamp(rightGimbal, -maxGimbal, maxGimbal);
-            ctrl.leftGimbal  = leftGimbal;
-            ctrl.rightGimbal = rightGimbal;
-        }
+                const float gimbalSpeed = 2.5f;
+                const float maxGimbal   = 0.8f;
+
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) {
+                    leftGimbal  += gimbalSpeed * Config::DT;
+                    rightGimbal += gimbalSpeed * Config::DT;
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) {
+                    leftGimbal  -= gimbalSpeed * Config::DT;
+                    rightGimbal -= gimbalSpeed * Config::DT;
+                }
+
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q)) {
+                    if (gimbalMode == 1) leftGimbal -= gimbalSpeed * Config::DT;
+                    else if (gimbalMode == 2) rightGimbal -= gimbalSpeed * Config::DT;
+                    else { leftGimbal -= gimbalSpeed * Config::DT; rightGimbal += gimbalSpeed * Config::DT; }
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E)) {
+                    if (gimbalMode == 1) leftGimbal += gimbalSpeed * Config::DT;
+                    else if (gimbalMode == 2) rightGimbal += gimbalSpeed * Config::DT;
+                    else { leftGimbal += gimbalSpeed * Config::DT; rightGimbal -= gimbalSpeed * Config::DT; }
+                }
+
+                leftGimbal  = std::clamp(leftGimbal,  -maxGimbal, maxGimbal);
+                rightGimbal = std::clamp(rightGimbal, -maxGimbal, maxGimbal);
+                ctrl.leftGimbal  = leftGimbal;
+                ctrl.rightGimbal = rightGimbal;
+            }
+
+            physics.update(ctrl, terrainH);
+
+            state = physics.getState();
+        };
 
         if (!paused) {
-            physics.update(ctrl, terrainH);
+            timeAcc += timeScale;
+            while (timeAcc >= 1.0f) {
+                doOneSimStep();
+                timeAcc -= 1.0f;
+            }
+        } else {
+            Vec2 radarOrigin{state.x, state.y};
+            radarHits = scanRadar(terrain, radarOrigin, 0.0f, radarCfg);
+            hasTargetSite = autopilot.hasLandingTarget();
+            if (hasTargetSite) targetSite = autopilot.getLandingTarget();
         }
 
         window.clear();
         visualizer.draw(window, state, terrain, radarHits, hasTargetSite, targetSite,
-                        autoMode, paused, foundMsgTimer, currentWind);
+                        autoMode, paused, foundMsgTimer, currentWind,
+                        timeScale, gimbalMode, autopilot.getPhaseName());
         
 
         window.display();
