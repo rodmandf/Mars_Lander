@@ -16,7 +16,7 @@ public:
               const LandingSite& targetSite,
               bool autoMode, bool paused,
               float foundMsgTimer,
-              float currentWind,
+              sf::Vector2f wind,
               float timeScale,
               int gimbalMode,
               const char* phaseName); 
@@ -24,12 +24,13 @@ public:
 private:
     sf::Font font;
     std::vector<sf::Vector2f> stars;
+    std::vector<sf::Vector2f> windStreaks;
 
     void drawHUD(sf::RenderWindow& window,
                  const RoverState& state,
                  bool autoMode,
                  bool paused,
-                 float currentWind,
+                 sf::Vector2f wind,
                  float timeScale,
                  int gimbalMode,
                  const char* phaseName,

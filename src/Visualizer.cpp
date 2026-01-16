@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <algorithm>
 #include <string> 
+#include <cstdio>
+#include <cmath>
 
 Visualizer::Visualizer() {
     std::vector<std::string> fontPaths;
@@ -34,6 +36,14 @@ Visualizer::Visualizer() {
     for (int i = 0; i < 100; i++) {
         stars.push_back({(float)(std::rand() % Config::WINDOW_WIDTH), (float)(std::rand() % Config::WINDOW_HEIGHT)});
     }
+
+    windStreaks.reserve(160);
+    for (int i = 0; i < 160; ++i) {
+        windStreaks.push_back({
+            (float)(std::rand() % Config::WINDOW_WIDTH),
+            (float)(std::rand() % Config::WINDOW_HEIGHT)
+        });
+    }
 }
 
 void Visualizer::draw(sf::RenderWindow& window, const RoverState& state, 
@@ -43,7 +53,7 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
                       const LandingSite& targetSite,
                       bool autoMode, bool paused,
                       float foundMsgTimer,
-                      float currentWind,
+                      sf::Vector2f wind,
                       float timeScale,
                       int gimbalMode,
                       const char* phaseName) 
@@ -185,7 +195,39 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     sf::View screenView = window.getDefaultView();
     window.setView(screenView);
 
-    drawHUD(window, state, autoMode, paused, currentWind, timeScale, gimbalMode, phaseName,
+    {
+        float dt = paused ? 0.0f : (Config::DT * timeScale);
+        float windMax = Config::WIND_MAX;
+        float mag = std::sqrt(wind.x * wind.x + wind.y * wind.y);
+        if (mag > 0.5f) {
+            float inv = 1.0f / std::max(1e-6f, mag);
+            sf::Vector2f dir{ wind.x * inv, wind.y * inv };
+
+            float speedScale = 6.0f; // визуальная скорость частиц
+            sf::Vector2f v{ wind.x * speedScale, wind.y * speedScale };
+            for (auto& p : windStreaks) {
+                p += v * dt;
+                if (p.x < 0.0f) p.x += (float)Config::WINDOW_WIDTH;
+                if (p.x >= (float)Config::WINDOW_WIDTH) p.x -= (float)Config::WINDOW_WIDTH;
+                if (p.y < 0.0f) p.y += (float)Config::WINDOW_HEIGHT;
+                if (p.y >= (float)Config::WINDOW_HEIGHT) p.y -= (float)Config::WINDOW_HEIGHT;
+            }
+
+            float len = std::clamp(3.0f + (mag / std::max(1e-6f, windMax)) * 14.0f, 3.0f, 17.0f);
+            sf::VertexArray streaks(sf::PrimitiveType::Lines, windStreaks.size() * 2);
+            for (size_t i = 0; i < windStreaks.size(); ++i) {
+                sf::Vector2f a = windStreaks[i];
+                sf::Vector2f b = a - dir * len;
+                streaks[i * 2 + 0].position = a;
+                streaks[i * 2 + 1].position = b;
+                streaks[i * 2 + 0].color = sf::Color(255, 255, 255, 110);
+                streaks[i * 2 + 1].color = sf::Color(255, 255, 255, 20);
+            }
+            window.draw(streaks);
+        }
+    }
+
+    drawHUD(window, state, autoMode, paused, wind, timeScale, gimbalMode, phaseName,
             hasTargetSite, targetSite);
 
     if (foundMsgTimer > 0.0f && hasTargetSite) {
@@ -206,7 +248,7 @@ void Visualizer::drawHUD(sf::RenderWindow& window,
                          const RoverState& state,
                          bool autoMode,
                          bool paused,
-                         float currentWind,
+                         sf::Vector2f wind,
                          float timeScale,
                          int gimbalMode,
                          const char* phaseName,
@@ -250,6 +292,10 @@ void Visualizer::drawHUD(sf::RenderWindow& window,
             "\nAlt: " + std::to_string((int)altToTarget);
     }
 
+    float windMag = std::sqrt(wind.x * wind.x + wind.y * wind.y);
+    char windStr[64];
+    std::snprintf(windStr, sizeof(windStr), "(%.0f, %.0f) |W|=%.0f", wind.x, wind.y, windMag);
+
     std::string info = 
         "Status: " + status + "\n" +
         "Phase: " + std::string(phaseName ? phaseName : "?") + "\n" +
@@ -259,7 +305,7 @@ void Visualizer::drawHUD(sf::RenderWindow& window,
         "Vx: " + std::to_string((int)state.vx) + "  Vy: " + std::to_string((int)state.vy) + "\n" +
         "Fuel: " + std::to_string((int)state.fuelMain) + "\n" +
         "Time: " + std::string(timeScaleStr) + "\n" +
-        "Wind: " + std::to_string((int)currentWind) +
+        "Wind: " + std::string(windStr) +
         (autoMode ? "" : "\nGimbal: " + gimbalModeStr) +
         targetInfo;
 
@@ -269,6 +315,39 @@ void Visualizer::drawHUD(sf::RenderWindow& window,
     txt.setPosition({20.f, 20.f});
     txt.setString(info);
     window.draw(txt);
+
+    // Индикатор ветра: круг + вектор
+    {
+        const float windMax = Config::WIND_MAX;
+        const float r = 46.0f;
+        sf::Vector2f center{ (float)Config::WINDOW_WIDTH - 70.0f, 70.0f };
+
+        sf::CircleShape ring(r);
+        ring.setOrigin({r, r});
+        ring.setPosition(center);
+        ring.setFillColor(sf::Color(0, 0, 0, 40));
+        ring.setOutlineThickness(2.0f);
+        ring.setOutlineColor(sf::Color(255, 255, 255, 120));
+        window.draw(ring);
+
+        sf::Vector2f v = wind;
+        float L = std::sqrt(v.x * v.x + v.y * v.y);
+        if (L > windMax && L > 1e-6f) {
+            v.x = v.x / L * windMax;
+            v.y = v.y / L * windMax;
+            L = windMax;
+        }
+
+        sf::Vector2f end = center + sf::Vector2f(v.x / windMax * r, v.y / windMax * r);
+        sf::VertexArray line(sf::PrimitiveType::Lines, 2);
+        line[0].position = center;
+        line[1].position = end;
+        line[0].color = sf::Color(0, 220, 255, 200);
+        line[1].color = sf::Color(0, 220, 255, 200);
+        window.draw(line);
+
+        
+    }
 
     if (paused) {
         sf::Text pausedTxt(font);

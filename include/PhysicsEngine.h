@@ -8,9 +8,10 @@ public:
     void update(ControlOutput input, float terrainHeight);
     RoverState getState() const;
 
-    void setWind(float w);
+    void setWind(sf::Vector2f w);
+    sf::Vector2f getWind() const { return windForce; }
 
 private:
     RoverState state;
-    float windForce = 0.0f; // Текущая сила ветра
+    sf::Vector2f windForce{0.0f, 0.0f};
 };

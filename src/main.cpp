@@ -10,6 +10,7 @@
 #include <vector>
 #include <ctime>
 #include <algorithm>
+#include <cmath>
 
 int main() {
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
@@ -39,7 +40,7 @@ int main() {
     bool landingFoundShown = false;
     float foundMsgTimer = 0.0f;
 
-    float currentWind = 0.0f;
+    sf::Vector2f wind{0.0f, 0.0f};
 
     RadarConfig radarCfg;
     DetectorConfig detCfg;
@@ -52,8 +53,8 @@ int main() {
         autopilot.reset();
         timeAcc = 0.0f;
 
-        currentWind = 0.0f; 
-        physics.setWind(currentWind);
+        wind = {0.0f, 0.0f};
+        physics.setWind(wind);
 
         int seed = std::rand();
         std::cout << "--- New Mission ---\n";
@@ -72,14 +73,10 @@ int main() {
                 if (keyPressed->code == sf::Keyboard::Key::P) paused = !paused;
                 if (keyPressed->code == sf::Keyboard::Key::R) restartMission();
                 if (keyPressed->code == sf::Keyboard::Key::M) autoMode = !autoMode;
-
-                if (keyPressed->code == sf::Keyboard::Key::LBracket) {
-                    currentWind -= 5.0f;
-                    std::cout << "Wind changed: " << currentWind << "\n";
-                }
-                if (keyPressed->code == sf::Keyboard::Key::RBracket) {
-                    currentWind += 5.0f;
-                    std::cout << "Wind changed: " << currentWind << "\n";
+                if (keyPressed->code == sf::Keyboard::Key::Num0 ||
+                    keyPressed->code == sf::Keyboard::Key::Numpad0)
+                {
+                    wind = {0.0f, 0.0f};
                 }
 
                 if (keyPressed->code == sf::Keyboard::Key::Hyphen) {
@@ -125,6 +122,23 @@ int main() {
             if (event->is<sf::Event::Closed>()) window.close();
         }
 
+        {
+            const float windRate = Config::WIND_RATE;
+            const float windMax = Config::WIND_MAX;
+            sf::Vector2f dv{0.0f, 0.0f};
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::U)) dv.y -= windRate * Config::DT;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J)) dv.y += windRate * Config::DT;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::H)) dv.x -= windRate * Config::DT;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K)) dv.x += windRate * Config::DT;
+
+            wind += dv;
+            float L = std::sqrt(wind.x * wind.x + wind.y * wind.y);
+            if (L > windMax && L > 1e-6f) {
+                wind.x = wind.x / L * windMax;
+                wind.y = wind.y / L * windMax;
+            }
+        }
+
         RoverState state = physics.getState();
         std::vector<RayHit> radarHits;
         bool hasTargetSite = autopilot.hasLandingTarget();
@@ -133,7 +147,7 @@ int main() {
 
         auto doOneSimStep = [&]() {
 
-            physics.setWind(currentWind);
+            physics.setWind(wind);
 
 
             RoverState st = physics.getState();
@@ -222,7 +236,7 @@ int main() {
 
         window.clear();
         visualizer.draw(window, state, terrain, radarHits, hasTargetSite, targetSite,
-                        autoMode, paused, foundMsgTimer, currentWind,
+                        autoMode, paused, foundMsgTimer, wind,
                         timeScale, gimbalMode, autopilot.getPhaseName());
         
 

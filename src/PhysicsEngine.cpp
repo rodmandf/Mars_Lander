@@ -1,7 +1,6 @@
 #include "PhysicsEngine.h"
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 void PhysicsEngine::init(float startX, float startY, float mainFuel, const std::vector<float>& aux) {
     state.x = startX; state.y = startY;
@@ -18,7 +17,7 @@ void PhysicsEngine::init(float startX, float startY, float mainFuel, const std::
     state.rightGimbal = 0.0f;
 }
 
-void PhysicsEngine::setWind(float w) {
+void PhysicsEngine::setWind(sf::Vector2f w) {
     windForce = w;
 }
 
@@ -78,7 +77,8 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
     float ax = (F_x / mass);
     float ay = (F_y / mass) - Config::GRAVITY;
 
-    ax += windForce / mass;
+    ax += (windForce.x / mass);
+    ay += (-windForce.y / mass);
 
     const float linearDragX = 0.35f;
     const float linearDragY = 0.10f;

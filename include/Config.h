@@ -16,6 +16,9 @@ namespace Config {
 
     // Максимально допустимый угол корпуса для безопасной посадки (радианы)
     const float MAX_LANDING_ANGLE_RAD = 0.13f;
+
+    const float WIND_MAX = 30.0f;
+    const float WIND_RATE = 10.0f;
     
     // Цвета
     const sf::Color MARS_SKY_TOP(20, 20, 40);
