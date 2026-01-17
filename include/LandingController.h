@@ -1,6 +1,5 @@
 #pragma once
 #include "Config.h"
-#include <vector>
 #include "RadarTypes.h"
 #include "LandingSiteDetector.h"
 

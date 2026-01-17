@@ -6,7 +6,6 @@
 #include "LandingSiteDetector.h"
 #include "Visualizer.h"
 #include <SFML/Graphics.hpp>
-#include <iostream>
 #include <vector>
 #include <ctime>
 #include <algorithm>
@@ -14,7 +13,7 @@
 
 int main() {
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
-    sf::RenderWindow window(sf::VideoMode({Config::WINDOW_WIDTH, Config::WINDOW_HEIGHT}), "Mars Lander - Wind Control Added");
+    sf::RenderWindow window(sf::VideoMode({Config::WINDOW_WIDTH, Config::WINDOW_HEIGHT}), "Mars Lander", sf::Style::Titlebar | sf::Style::Close);
     window.setFramerateLimit(0);
 
     sf::View defaultView = window.getDefaultView();
@@ -57,7 +56,6 @@ int main() {
         physics.setWind(wind);
 
         int seed = std::rand();
-        std::cout << "--- New Mission ---\n";
         
         terrain = terrainGen.generate(Config::WINDOW_WIDTH, seed);
         float startX = 100.0f + (std::rand() % (Config::WINDOW_WIDTH - 200));
@@ -81,21 +79,18 @@ int main() {
 
                 if (keyPressed->code == sf::Keyboard::Key::Hyphen) {
                     timeScale = std::max(0.25f, timeScale * 0.5f);
-                    std::cout << "Time scale: " << timeScale << "x\n";
                 }
                 if (keyPressed->code == sf::Keyboard::Key::Equal) {
                     timeScale = std::min(4.0f, timeScale * 2.0f);
-                    std::cout << "Time scale: " << timeScale << "x\n";
                 }
 
                 if (keyPressed->code == sf::Keyboard::Key::X) {
                     std::swap(leftGimbal, rightGimbal);
-                    std::cout << "Gimbal swapped! L=" << leftGimbal << " R=" << rightGimbal << "\n";
                 }
+
                 if (keyPressed->code == sf::Keyboard::Key::Z) {
                     leftGimbal = 0.0f;
                     rightGimbal = 0.0f;
-                    std::cout << "Gimbal reset to zero\n";
                 }
                 if (keyPressed->code == sf::Keyboard::Key::Num1) gimbalMode = 1;
                 if (keyPressed->code == sf::Keyboard::Key::Num2) gimbalMode = 2;
@@ -156,7 +151,7 @@ int main() {
 
 
             Vec2 radarOrigin{st.x, st.y};
-            radarHits = scanRadar(terrain, radarOrigin, 0.0f, radarCfg);
+            radarHits = scanRadar(terrain, radarOrigin, st.angle, radarCfg);
 
             auto sites = detectLandingSites(radarHits, st.x, detCfg);
             LandingSite bestSite{};

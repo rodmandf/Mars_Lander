@@ -1,9 +1,5 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include <vector>
-#include <cmath>
-#include <iostream>
-#include <optional>
 
 // Константы физики и мира 
 namespace Config {
@@ -35,6 +31,7 @@ struct RoverState {
     float angularVel;
     float fuelMain;    // Основной бак
     std::vector<float> auxTanks; // Доп. баки
+    float comXLocal = 0.0f;
     bool crashed = false;
     bool landed = false;
     float mainThrust = 0.0f; 

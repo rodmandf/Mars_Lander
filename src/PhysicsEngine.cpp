@@ -45,6 +45,20 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
     const float h = 16.0f;
     const float I = (1.0f / 12.0f) * mass * (w*w + h*h); 
 
+    const float maxComShift = 1.2f;
+    const float comTau      = 0.65f;   
+
+    float c0 = std::cos(state.angle);
+    float s0 = std::sin(state.angle);
+    float g_xL = s0 * Config::GRAVITY;
+
+    float comTarget = std::clamp((-g_xL / Config::GRAVITY) * maxComShift, -maxComShift, +maxComShift);
+
+    float aCom = dt / std::max(1e-3f, comTau);
+    if (aCom > 1.0f) aCom = 1.0f;
+    state.comXLocal += (comTarget - state.comXLocal) * aCom;
+    state.comXLocal = std::clamp(state.comXLocal, -maxComShift, +maxComShift);
+
     float mainN  = std::clamp(input.mainThrust, 0.0f, 1.0f) * Config::MAX_MAIN_THRUST;
     float leftN  = std::clamp(input.leftThrust, 0.0f, 1.0f) * Config::MAX_SIDE_THRUST;
     float rightN = std::clamp(input.rightThrust,0.0f, 1.0f) * Config::MAX_SIDE_THRUST;
@@ -68,8 +82,8 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
     float F_xL = Fm_xL + Fl_xL + Fr_xL;
     float F_yL = Fm_yL + Fl_yL + Fr_yL;
 
-    float c = std::cos(state.angle);
-    float s = std::sin(state.angle);
+    float c = c0;
+    float s = s0;
 
     float F_x = F_xL * c + F_yL * s;
     float F_y = -F_xL * s + F_yL * c;
@@ -98,12 +112,21 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
     float rR_x = rR_xL * c + rR_yL * s;
     float rR_y = -rR_xL * s + rR_yL * c;
 
+    float rM_xL = 0.0f - state.comXLocal, rM_yL = -h * 0.5f;
+    float rM_x = rM_xL * c + rM_yL * s;
+    float rM_y = -rM_xL * s + rM_yL * c;
+
+    float Fm_x = Fm_xL * c + Fm_yL * s;
+    float Fm_y = -Fm_xL * s + Fm_yL * c;
+
     float Fl_x = Fl_xL * c + Fl_yL * s;
     float Fl_y = -Fl_xL * s + Fl_yL * c;
     float Fr_x = Fr_xL * c + Fr_yL * s;
     float Fr_y = -Fr_xL * s + Fr_yL * c;
 
-    float tau = (rL_x * Fl_y - rL_y * Fl_x) + (rR_x * Fr_y - rR_y * Fr_x);
+    float tau = (rL_x * Fl_y - rL_y * Fl_x) +
+                (rR_x * Fr_y - rR_y * Fr_x) +
+                (rM_x * Fm_y - rM_y * Fm_x);
     float alpha = tau / I; 
 
     state.angularVel += alpha * dt;
@@ -114,7 +137,7 @@ void PhysicsEngine::update(ControlOutput input, float terrainHeight) {
     if (state.y >= terrainHeight - groundoffset) { 
         state.y = terrainHeight - groundoffset;
         
-        bool safeSpeed = std::abs(state.vy) < 12.0f && std::abs(state.vx) < 12.0f; 
+        bool safeSpeed = std::abs(state.vy) < 2.0f && std::abs(state.vx) < 12.0f; 
         
         bool bothLegsDown = std::abs(state.angle) < Config::MAX_LANDING_ANGLE_RAD; 
 

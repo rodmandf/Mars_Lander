@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
-#include <iostream>
 
 void LandingController::setLandingTarget(const LandingSite& site) {
     lockedSite = site;
@@ -117,7 +116,6 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
             stableHoverTimer = 0.0f;
             hoverDuration = 0.0f;
             resetPids();
-            std::cout << "Descend initiated.\n";
         }
     }
 
@@ -163,28 +161,49 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
     
     if (phase == Phase::Descend && altToTarget < 15.0f) angDeadband = deg2rad(0.1f);
 
-    if (std::abs(errorAng) < angDeadband && std::abs(state.angularVel) < 0.1f) {
-        out.leftThrust = 0.0f; out.rightThrust = 0.0f;
-        out.leftGimbal = 0.0f; out.rightGimbal = 0.0f;
-    } else {
+    {
+        const float wBody = 20.0f;
         float kp = 4.5f; 
         float kd = 8.0f;
         float gMax = 0.6f;
-        
         if (altToTarget < 20.0f) { 
             kp = 9.0f;  
             kd = 14.0f; 
             gMax = 1.0f; 
         }
 
-        float turnCmd = std::clamp(errorAng * kp - state.angularVel * kd, -1.0f, 1.0f);
-        float thr = std::abs(turnCmd);
-        float g = turnCmd * gMax;
+        const float mass = 10.0f;
+        const float w = 20.0f;
+        const float h = 16.0f;
+        const float I = (1.0f / 12.0f) * mass * (w*w + h*h);
 
-        out.leftThrust  = thr;
-        out.rightThrust = thr;
-        out.leftGimbal  = -g;
-        out.rightGimbal = +g;
+        float alphaCmd = (errorAng * kp - state.angularVel * kd);
+        alphaCmd = std::clamp(alphaCmd, -3.0f, 3.0f);
+        float tauPD = I * alphaCmd;
+
+        float mainN = std::clamp(state.mainThrust, 0.0f, 1.0f) * Config::MAX_MAIN_THRUST;
+        float tauFF = state.comXLocal * mainN;
+
+        const float tauMaxAtFull = wBody * Config::MAX_SIDE_THRUST * std::sin(std::abs(gMax));
+        const float tauMax = std::max(1e-3f, tauMaxAtFull);
+
+        float tauCmd = std::clamp(tauPD + tauFF, -tauMax, +tauMax);
+
+        bool inDeadband = (std::abs(errorAng) < angDeadband && std::abs(state.angularVel) < 0.1f);
+        if (inDeadband && std::abs(tauCmd) < 0.5f) {
+            out.leftThrust = 0.0f; out.rightThrust = 0.0f;
+            out.leftGimbal = 0.0f; out.rightGimbal = 0.0f;
+        } else {
+            float thrNeededN = std::abs(tauCmd) / (wBody * std::max(1e-3f, std::sin(std::abs(gMax))));
+            float thr = std::clamp(thrNeededN / Config::MAX_SIDE_THRUST, 0.0f, 1.0f);
+
+            float g = (tauCmd >= 0.0f ? +gMax : -gMax);
+
+            out.leftThrust  = thr;
+            out.rightThrust = thr;
+            out.leftGimbal  = -g;
+            out.rightGimbal = +g;
+        }
     }
 
     // Вертикальное управление
@@ -193,7 +212,7 @@ ControlOutput LandingController::compute(const RoverState& state, const std::vec
         targetVy = -12.0f;
         if (altToTarget < 40.0f) targetVy = -5.0f;
         if (altToTarget < 12.0f) targetVy = -2.0f;
-        if (altToTarget < 4.0f)  targetVy = -1.0f;
+        if (altToTarget < 4.0f)  targetVy = -0.5f;
     } else {
         float altErr = (hoverAlt - altToTarget);
         targetVy = std::clamp(altErr * 0.4f, -10.0f, 10.0f);

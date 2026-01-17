@@ -1,5 +1,4 @@
 #include "Visualizer.h"
-#include <iostream>
 #include <cstdlib>
 #include <algorithm>
 #include <string> 
@@ -11,7 +10,6 @@ Visualizer::Visualizer() {
     #ifdef _WIN32
         fontPaths.push_back("C:/Windows/Fonts/arial.ttf");
     #elif defined(__APPLE__)
-        fontPaths.push_back("/Library/Fonts/Arial.ttf");
         fontPaths.push_back("/System/Library/Fonts/Helvetica.ttc");
         fontPaths.push_back("/System/Library/Fonts/Geneva.ttf"); 
     #elif defined(__linux__)
@@ -25,12 +23,8 @@ Visualizer::Visualizer() {
     for (const auto& path : fontPaths) {
         if (font.openFromFile(path)) {
             fontLoaded = true;
-            std::cout << "Loaded font: " << path << std::endl;
             break;
         }
-    }
-    if (!fontLoaded) {
-        std::cerr << "Failed to load any system font!" << std::endl;
     }
 
     for (int i = 0; i < 100; i++) {
@@ -141,6 +135,12 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     legL.setRotation(sf::degrees(30.f));
     legL.setFillColor(sf::Color(50, 50, 50));
     window.draw(legL, t);
+   
+    sf::RectangleShape legLpad({12.f, 3.0f});
+    legLpad.setOrigin({6.f, 0.f});
+    legLpad.setPosition({-14.f, 16.f});
+    legLpad.setFillColor(sf::Color(50, 50, 50));
+    window.draw(legLpad,t);
 
     sf::RectangleShape legR({4.f, 12.f});
     legR.setOrigin({2.f, 0.f});
@@ -149,30 +149,53 @@ void Visualizer::draw(sf::RenderWindow& window, const RoverState& state,
     legR.setFillColor(sf::Color(50, 50, 50));
     window.draw(legR, t);
 
+    sf::RectangleShape legRpad({12.f, 3.f});
+    legRpad.setOrigin({6.f, 0.f});
+    legRpad.setPosition({14.0f, 16.0f});
+    legRpad.setFillColor(sf::Color(50, 50, 50));
+    window.draw(legRpad,t);
+
     // Главный двигатель
-    if (state.fuelMain > 0 && state.mainThrust > 0.01f && !state.crashed && !state.landed) {
-        float thrustScale = state.mainThrust; 
-        float flicker = 10.0f + (std::rand() % 15);
-        
-        sf::ConvexShape flame;
-        flame.setPointCount(3);
-        flame.setPoint(0, { -5.f, 8.f });
-        flame.setPoint(1, { 5.f, 8.f });
-        flame.setPoint(2, { 0.f, 8.f + flicker * thrustScale });
-        flame.setFillColor(sf::Color(255, 100, 0));
-        window.draw(flame, t);
+    const bool canDrawJets = (!state.crashed && !state.landed);
+    if (canDrawJets && state.fuelMain > 0.0f) {
+        float thr = std::clamp(state.mainThrust, 0.01f, 1.0f);
+
+        float baseLen = 6.0f + 10.0f * std::sqrt(thr);
+        float flicker = (float)(std::rand() % 10); // 0..9
+        float lenOuter = baseLen + flicker * (0.35f + 0.65f * thr);
+        float lenInner = std::max(4.0f, lenOuter * 0.6f);
+
+        sf::ConvexShape flameOuter;
+        flameOuter.setPointCount(3);
+        flameOuter.setPoint(0, { -6.f, 8.f });
+        flameOuter.setPoint(1, {  6.f, 8.f });
+        flameOuter.setPoint(2, {  0.f, 8.f + lenOuter });
+        flameOuter.setFillColor(sf::Color(255, 120, 0, 220));
+        window.draw(flameOuter, t);
+
+        sf::ConvexShape flameInner;
+        flameInner.setPointCount(3);
+        flameInner.setPoint(0, { -3.5f, 8.f });
+        flameInner.setPoint(1, {  3.5f, 8.f });
+        flameInner.setPoint(2, {  0.f, 8.f + lenInner });
+        flameInner.setFillColor(sf::Color(255, 245, 200, 235));
+        window.draw(flameInner, t);
     }
 
     // Боковые двигатели
     auto drawSideJet = [&](sf::Vector2f mount, float throttle, float gimbal, bool isLeft)
     {
-        if (throttle <= 0.01f) return;
+        
         sf::RectangleShape noz({6.f, 3.f});
         noz.setOrigin({3.f, 1.5f});
         noz.setPosition(mount);
+        // Поворачиваем сопло в направлении струи (совпадает с gimbal)
+        float nozAngle = isLeft ? (gimbal + sf::priv::pi) : (-gimbal);
+        noz.setRotation(sf::degrees(nozAngle * 180.0f / sf::priv::pi));
         noz.setFillColor(sf::Color(220,220,220,220));
         window.draw(noz, t);
 
+        if (throttle <= 0.01f) return;
         sf::Vector2f dirLocal;
         if (isLeft)  dirLocal = { std::cos(gimbal),  std::sin(gimbal) };
         else dirLocal = { -std::cos(gimbal), std::sin(gimbal) };
